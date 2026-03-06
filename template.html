@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en" class=""><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"><script id="externs">//variables to add to the script to send back when needed
+
+window.HSASE_preventDataTypes = '';
+window.HSASE_detectDataTypes = '1466a561-5cf5-4b37-918d-8e633d38861a,408f49a3-5612-4fdc-a3f0-a963a3878f64,2abfe86d-7132-46c1-bad0-42ef44498bb4,48509948-c459-4213-832d-2296d7fabda9,648fe5af-315f-44a7-98cc-c5120524e00a,d2c4411f-dd0e-495b-b856-5686e68892b4,4342b3da-2fd9-4c07-bec8-dd53eb40e84c,e37af9fa-ed18-4443-9b85-a94d94cc8986,5ff071dc-3ad5-440d-9fe4-9b0e88cb8103,af7a2ba1-40e7-4613-8c70-7971cd923906';
+window.HSASE_FailType = 'open';
+</script><script id="FilesDLP" defer="defer" crossorigin="anonymous">(function () {
+    function docReady(fn) {
+        if (document.readyState === "complete" || document.readyState === "interactive") {
+            setTimeout(fn, 1);
+        } else {
+            document.addEventListener("DOMContentLoaded", fn);
+        }
+    }
+
+    function sendFiles(event, formData) {
+        let result;
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', 'https://checkpoint.com/_localroute/dlp/upload', false);
+        xhr.setRequestHeader('preventDataTypes', window.HSASE_preventDataTypes);
+        xhr.setRequestHeader('detectDataTypes', window.HSASE_detectDataTypes);
+        xhr.setRequestHeader('failType', window.HSASE_FailType);
+
+        xhr.onload = function () {
+            if (xhr.status === 200) {
+                console.log('Files uploaded successfully!');
+                if (!event) {
+                    result = true;
+                }
+            } else if (xhr.status === 403) {
+                if(event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                } else {
+                    console.log('Files blocked by DLP policy, returning false');
+                    result = false;
+                    return;
+                }
+                window.location.href = 'https://checkpoint.com/_localroute/dlp/block';
+            } else {
+                throw new Error(`Failed to upload files. Status code: ${xhr.status}`);
+            }
+        };
+
+        xhr.onerror = function () {
+            console.error('Error occurred during the upload.');
+            if (!event) result = false;
+        };
+
+        xhr.send(formData);
+        return result;
+    }
+
+    function uploadFiles(event, files) {
+        console.log("uploading files:", files.length);
+        try {
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append("file", files[i]);
+            }
+            sendFiles(event, formData);
+        } catch (error) {
+            console.error("Error uploading files:", error);
+        }
+    }
+
+    function uploadFilesAndCheck(files) {
+        console.log("uploading files:", files.length);
+        try {
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append("file", files[i]);
+            }
+            const res = sendFiles(null, formData);
+            console.log("Upload success:", res);
+            return res;
+        } catch (error) {
+            console.error("Error uploading files:", error);
+            return false;
+        }
+    }
+
+    function handleFileInput(event) {
+        if (event.target.type === "file") {
+            if (event.proccessed) {
+                return;
+            }
+            event.proccessed = true;
+            uploadFiles(event, event.target.files);
+        }
+    }
+
+
+    function inputEvent() {
+        let origCreate = document.createElement;
+        document.createElement = function (tagType) {
+            let createdElement = origCreate.call(document, tagType);
+            if (tagType === 'input') {
+                createdElement.addEventListener("change", handleFileInput, true);
+            }
+            return createdElement;
+        };
+
+        document.addEventListener("change", handleFileInput, true);
+    }
+
+    function filePickerEvent() {
+        const checkFilePicker = setInterval(() => {
+            if (window.showOpenFilePicker) {
+                console.log("window.showOpenFilePicker found");
+                clearInterval(checkFilePicker);
+                clearTimeout(timeout);
+                const origFilePicker = window.showOpenFilePicker;
+                window.showOpenFilePicker = async function (params) {
+                    console.log("window.showOpenFilePicker function invoked");
+                    let fileHandles;
+                    try {
+                        fileHandles = await origFilePicker(params);
+                        const filesList = [];
+                        for (const fileHandle of fileHandles) {
+                            const file = await fileHandle.getFile();
+                            filesList.push(file);
+                        }
+                        const uploadSuccess = await uploadFilesAndCheck(filesList);
+                        console.log("Upload success:", uploadSuccess);
+                        if (!uploadSuccess) {
+                            window.location.href = 'https://checkpoint.com/_localroute/dlp/block';
+                            return;
+                        }
+                        return fileHandles;
+                    } catch (e) {
+                        console.log("Error during file selection:", e);
+                        return fileHandles;
+                    }
+                };
+            }
+        }, 100); // Check every 100ms
+
+        const timeout = setTimeout(() => {
+            clearInterval(checkFilePicker);
+            console.log("Timeout: window.showOpenFilePicker not found");
+        }, 5000); // Timeout after 5 seconds
+    }
+
+    function handlePaste(event) {
+        console.log("Paste event detected");
+        const clipboardData = event.clipboardData || window.clipboardData;
+        const items = clipboardData.items;
+        if (!items || !items.length) {
+            console.log("No items in clipboard");
+            return;
+        }
+        const pastedFiles = Array.from(items).filter(item => item.kind === 'file').map(item => item.getAsFile());
+        if (!pastedFiles.length) {
+            console.log("No files pasted");
+            return;
+        }
+        uploadFiles(event, pastedFiles);
+    }
+
+    docReady(function () {
+        inputEvent();
+        filePickerEvent();
+        document.addEventListener('drop', event => uploadFiles(event, event.dataTransfer.files), true);
+        document.addEventListener('paste', handlePaste, true);
+        console.log("document loaded");
+    });
+})();</script>
+  
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Welcome to Super Surf Shack</title>
+    <link rel="icon" href="https://www.sunsetlearning.com/wp-content/uploads/2017/06/favicon.png">
+
+    <!-- Brand Style -->
+    <style>
+      body {
+        font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background-color: #ffffff;
+        color: #333;
+        margin: 0;
+        padding: 0;
+      }
+
+      header {
+        background-color: #00457c;
+        color: white;
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      header img {
+        height: 50px;
+      }
+
+      main {
+        padding: 2rem;
+        max-width: 800px;
+        margin: auto;
+      }
+
+      h1 {
+        color: #00457c;
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+      }
+
+      h2 {
+        color: #e87722;
+        font-size: 1.4rem;
+        margin-top: 2rem;
+      }
+
+      p {
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+
+      img.illustration {
+        display: block;
+        margin: 2rem auto;
+        max-width: 100%;
+        height: auto;
+      }
+
+      footer {
+        background-color: #f5f5f5;
+        text-align: center;
+        padding: 1rem;
+        font-size: 0.9rem;
+        color: #777;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <img src="template_files/surfcar.png" alt="Surf Shack Logo">
+      <div>Technical Training Excellence</div>
+    </header>
+
+    <main>
+      <h1>Student Test Success!</h1>
+      <img class="illustration" src="template_files/surfcar.png" alt="Test Success Illustration">
+      <h2>You have successfully accessed the template page.</h2>
+      <p>
+        Welcome to Super Surf Shack student testing environment. This 
+page confirms that you can reach required course tools and that your 
+connection meets basic training prerequisites.
+      </p>
+      <p>
+        Need assistance? Use the chat widget in the corner to get help from our support team.
+      </p>
+    </main>
+
+    <footer>
+      © Sunset Learning Institute | <a href="https://www.sunsetlearning.com/" target="_blank">sunsetlearning.com</a>
+    </footer>
+
+    <!-- Put Chat Widget 1 Line Below -->
+    <!-- Chat Widget Above r5 -->
+  
+
+<script src="template_files/imichatgeneral.js" type="text/javascript"></script><script type="text/javascript" src="template_files/jquery.min.js"></script><script type="text/javascript" src="template_files/proactive-msg-manager.js"></script></body></html>
